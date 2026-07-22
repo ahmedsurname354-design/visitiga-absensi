@@ -21,6 +21,8 @@ export default function AdminPage() {
   const [employeeMessage, setEmployeeMessage] = useState("");
   const [employeeError, setEmployeeError] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(12);
 
   function normalizeRole(role) {
     if (!role) return null;
@@ -131,6 +133,16 @@ export default function AdminPage() {
       return true;
     });
   }, [attendance, filters]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAttendance.length / rowsPerPage));
+  const paginatedAttendance = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage;
+    return filteredAttendance.slice(start, start + rowsPerPage);
+  }, [filteredAttendance, currentPage, rowsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredAttendance.length, rowsPerPage]);
 
   // Ringkasan Statistik Berdasarkan Filter yang Aktif
   const summary = useMemo(() => {
@@ -381,17 +393,22 @@ export default function AdminPage() {
               <h2 className="text-2xl font-semibold text-slate-900">Filter Data Absensi</h2>
               <p className="mt-1 text-sm text-slate-600">Pilih filter karyawan, bulan, dan tahun rekapitulasi.</p>
             </div>
-            <button
-              type="button"
-              onClick={exportExcel}
-              disabled={loading || filteredAttendance.length === 0}
-              className="rounded-3xl bg-orange-600 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300 shadow-md shadow-orange-600/20"
-            >
-              Export Excel (.xlsx)
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <span className="font-semibold">{filteredAttendance.length}</span> record setelah filter
+              </div>
+              <button
+                type="button"
+                onClick={exportExcel}
+                disabled={loading || filteredAttendance.length === 0}
+                className="rounded-3xl bg-orange-600 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300 shadow-md shadow-orange-600/20"
+              >
+                Export Excel (.xlsx)
+              </button>
+            </div>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          <div className="mt-6 grid gap-4 sm:grid-cols-4">
             <label className="block">
               <span className="text-xs font-semibold uppercase text-slate-700">Pilih Karyawan</span>
               <select
@@ -440,6 +457,19 @@ export default function AdminPage() {
                 ))}
               </select>
             </label>
+
+            <label className="block">
+              <span className="text-xs font-semibold uppercase text-slate-700">Baris per Halaman</span>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-100"
+              >
+                {[10, 12, 15, 20, 30].map((count) => (
+                  <option key={count} value={count}>{count} per halaman</option>
+                ))}
+              </select>
+            </label>
           </div>
         </section>
 
@@ -466,7 +496,7 @@ export default function AdminPage() {
               </div>
             ) : (
               Object.entries(
-                filteredAttendance.reduce((acc, item) => {
+                paginatedAttendance.reduce((acc, item) => {
                   const userId = item.user_id || item.user_email || "unknown";
                   const dateKey = new Date(item.check_in_time).toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
                   acc[userId] = acc[userId] || {};
@@ -516,6 +546,33 @@ export default function AdminPage() {
                 );
               })
             )}
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              Menampilkan <span className="font-semibold text-slate-900">{paginatedAttendance.length}</span> dari <span className="font-semibold text-slate-900">{filteredAttendance.length}</span> record
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Sebelumnya
+              </button>
+              <span className="text-sm text-slate-700">
+                Halaman <span className="font-semibold text-slate-900">{currentPage}</span> dari <span className="font-semibold text-slate-900">{totalPages}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Berikutnya
+              </button>
+            </div>
           </div>
         </section>
       </div>

@@ -137,7 +137,7 @@ export default function DashboardPage() {
         setGeoMessage(
           result.isInside
             ? `Lokasi Terkunci (Akurasi GPS: ~${Math.round(accuracy)}m). Anda berada di dalam radius kantor.`
-            : `Akurasi GPS: ~${Math.round(accuracy)}m. Anda di luar radius kantor (Maks 200m). Jarak terdeteksi: ${Math.round(result.distance)} m`
+            : `Akurasi GPS: ~${Math.round(accuracy)}m. Anda di luar radius kantor (Maks 130m). Jarak terdeteksi: ${Math.round(result.distance)} m`
         );
       },
       (err) => {
@@ -180,7 +180,7 @@ export default function DashboardPage() {
     setError("");
 
     if (!gpsStatus.isInside) {
-      setError("Absen diblokir! Anda harus berada di dalam radius 200m dari kantor PT Visitiga Media.");
+      setError("Absen diblokir! Anda harus berada di dalam radius 130m dari kantor PT Visitiga Media.");
       return;
     }
 
@@ -520,7 +520,7 @@ export default function DashboardPage() {
               <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
                 <p className="text-xs font-semibold text-slate-400 uppercase">Posisi GPS</p>
                 <p className="mt-1 text-base font-semibold text-slate-900">
-                  {lastAttendance.distance <= 200 ? "Di Dalam Kantor" : "Di Luar Kantor"}
+                  {lastAttendance.distance <= 130 ? "Di Dalam Kantor" : "Di Luar Kantor"}
                 </p>
               </div>
             </div>
