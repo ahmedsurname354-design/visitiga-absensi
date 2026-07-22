@@ -202,11 +202,6 @@ export default function LoginPage() {
             <p className="mt-1 text-sm text-slate-500">
               Gunakan email kantor dan password terdaftar. Selfie dan geolokasi hanya akan muncul setelah login di dashboard.
             </p>
-            <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Perhatian:</p>
-              <p className="mt-1">Tidak ada kamera atau selfie di halaman login. Hanya email dan password yang diperlukan di sini.</p>
-            </div>
-
             <form onSubmit={handleLogin} className="mt-6 space-y-4">
               <div className="mb-4">
                 <label className="mb-1.5 block text-xs font-semibold text-slate-700 uppercase tracking-wider">
@@ -273,15 +268,6 @@ export default function LoginPage() {
             </form>
 
 
-            <div className="mt-6 rounded-2xl border border-orange-100 bg-orange-50/60 p-4 text-xs text-slate-600">
-              <p className="font-semibold text-orange-800">Bantuan Login?</p>
-              <p className="mt-1 text-slate-600">
-                Pendaftaran akun karyawan hanya dapat dilakukan oleh admin. Jika Anda belum punya akun, minta admin/IT untuk membuatkannya.
-              </p>
-              <p className="mt-3 text-slate-600 font-semibold">Login admin contoh:</p>
-              <p className="text-slate-600">Email: admin@visitiga.com</p>
-              <p className="text-slate-600">Password: Admin123!</p>
-            </div>
           </section>
         </div>
       </div>
