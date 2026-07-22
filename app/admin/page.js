@@ -459,63 +459,63 @@ export default function AdminPage() {
             </p>
           )}
 
-          <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-100">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3.5 font-semibold text-slate-700">Nama Karyawan</th>
-                  <th className="px-4 py-3.5 font-semibold text-slate-700">Tanggal</th>
-                  <th className="px-4 py-3.5 font-semibold text-slate-700">Jam Masuk</th>
-                  <th className="px-4 py-3.5 font-semibold text-slate-700">Jam Pulang</th>
-                  <th className="px-4 py-3.5 font-semibold text-slate-700">Status</th>
-                  <th className="px-4 py-3.5 font-semibold text-slate-700">Koordinat GPS</th>
-                  <th className="px-4 py-3.5 font-semibold text-slate-700">Foto Selfie</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {filteredAttendance.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="px-4 py-8 text-center text-slate-500">
-                      Data absensi tidak ditemukan untuk filter ini.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAttendance.map((row) => (
-                    <tr key={row.id} className="hover:bg-slate-50/80 transition">
-                      <td className="px-4 py-4 font-medium text-slate-900">{row.user_name || row.user_email}</td>
-                      <td className="px-4 py-4 text-slate-600">{formatDateOnly(row.check_in_time)}</td>
-                      <td className="px-4 py-4 font-semibold text-slate-800">{formatTimeOnly(row.check_in_time)}</td>
-                      <td className="px-4 py-4 text-slate-600">{formatTimeOnly(row.check_out_time)}</td>
-                      <td className="px-4 py-4">
-                        <span className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${
-                          row.status === "Terlambat" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
-                        }`}>
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-xs font-mono text-slate-500">
-                        {row.latitude?.toFixed(4)}, {row.longitude?.toFixed(4)}
-                        <span className="block text-[10px] text-slate-400">({row.distance || 0}m dari kantor)</span>
-                      </td>
-                      <td className="px-4 py-4">
-                        {row.image_url ? (
-                          <a
-                            href={row.image_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 font-semibold text-orange-600 hover:underline"
-                          >
-                            Lihat Foto
-                          </a>
-                        ) : (
-                          <span className="text-slate-400">Tidak ada</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div className="mt-6 space-y-4">
+            {filteredAttendance.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                Data absensi tidak ditemukan untuk filter ini.
+              </div>
+            ) : (
+              Object.entries(
+                filteredAttendance.reduce((acc, item) => {
+                  const userId = item.user_id || item.user_email || "unknown";
+                  const dateKey = new Date(item.check_in_time).toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+                  acc[userId] = acc[userId] || {};
+                  acc[userId][dateKey] = acc[userId][dateKey] || [];
+                  acc[userId][dateKey].push(item);
+                  return acc;
+                }, {})
+              ).map(([userId, dates]) => {
+                const user = employees.find((e) => e.id === userId) || { name: (filteredAttendance.find(r => (r.user_id===userId))?.user_name) || userId };
+                return (
+                  <div key={userId} className="rounded-2xl border border-slate-100 bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-slate-900">{user.name || userId}</h3>
+                      <p className="text-sm text-slate-500">{Object.keys(dates).length} hari</p>
+                    </div>
+
+                    <div className="mt-3 space-y-3">
+                      {Object.entries(dates).sort((a,b)=> b[0].localeCompare(a[0])).map(([dateKey, rows]) => (
+                        <div key={dateKey} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                          <div className="flex items-center justify-between">
+                            <strong className="text-sm text-slate-700">{new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeZone: "Asia/Jakarta" }).format(new Date(dateKey))}</strong>
+                            <span className="text-xs text-slate-500">{rows.length} record</span>
+                          </div>
+
+                          <div className="mt-2 grid gap-2">
+                            {rows.map((row) => (
+                              <div key={row.id} className="flex items-center justify-between gap-4 rounded-xl bg-white p-2">
+                                <div className="min-w-0">
+                                  <div className="text-sm font-semibold text-slate-900">{formatTimeOnly(row.check_in_time)} — {row.status}</div>
+                                  <div className="text-xs text-slate-500">Jarak: {row.distance || 0} m • {row.latitude?.toFixed(4) || '-'}, {row.longitude?.toFixed(4) || '-'}</div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="text-xs text-slate-500 mr-2">{formatTimeOnly(row.check_out_time)}</div>
+                                  {row.image_url ? (
+                                    <a href={row.image_url} target="_blank" rel="noreferrer" className="inline-block rounded-md bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700">Lihat Foto</a>
+                                  ) : (
+                                    <span className="text-xs text-slate-400">No Photo</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </section>
       </div>

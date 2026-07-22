@@ -9,6 +9,8 @@ import { isWithinOfficeRadius } from "@/lib/geofence";
 export default function DashboardPage() {
   const router = useRouter();
   const webcamRef = useRef(null);
+  const watchIdRef = useRef(null); // Ref untuk menyimpan ID watchPosition
+
   const [profile, setProfile] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [geoMessage, setGeoMessage] = useState("Menunggu izin lokasi...");
@@ -73,6 +75,13 @@ export default function DashboardPage() {
     if (!profile) return;
     requestGeolocation();
     loadAttendance();
+
+    // Cleanup watchPosition saat komponen di-unmount
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
   }, [profile]);
 
   async function loadAttendance() {
@@ -91,34 +100,60 @@ export default function DashboardPage() {
     setAttendance(data || []);
   }
 
+  // FUNGSI PERBAIKAN GEOLOCATION (Menggunakan watchPosition + High Accuracy)
   const requestGeolocation = useCallback(() => {
     if (!navigator.geolocation) {
       setGeoMessage("Perangkat tidak mendukung GPS.");
       return;
     }
 
-    setGeoMessage("Mendeteksi lokasi...");
+    // Bersihkan listener GPS yang lama jika ada
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
 
-    navigator.geolocation.getCurrentPosition(
+    setGeoMessage("Mengkunci sinyal GPS presisi... Mohon tunggu sebentar.");
+
+    const options = {
+      enableHighAccuracy: true, // Wajib paksa GPS hardware
+      timeout: 20000,           // Beri waktu 20 detik untuk mendapat sinyal presisi
+      maximumAge: 0,            // Jangan gunakan cache lokasi lama
+    };
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
+        const { latitude, longitude, accuracy } = position.coords;
         const result = isWithinOfficeRadius(latitude, longitude);
-        
+
         setLocation({ latitude, longitude });
         setGpsStatus(result);
+
+        // Jika akurasi sudah tergolong sangat presisi (<= 30 meter), hentikan pencarian lokasi
+        if (accuracy <= 30) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = null;
+        }
+
         setGeoMessage(
-          result.isInside 
-            ? "Anda berada di dalam radius kantor." 
-            : "Anda berada di luar radius kantor (Maks 200m)."
+          result.isInside
+            ? `Lokasi Terkunci (Akurasi GPS: ~${Math.round(accuracy)}m). Anda berada di dalam radius kantor.`
+            : `Akurasi GPS: ~${Math.round(accuracy)}m. Anda di luar radius kantor (Maks 200m). Jarak terdeteksi: ${Math.round(result.distance)} m`
         );
       },
       (err) => {
         console.error("GPS Error:", err);
-        setGeoMessage("Gagal mendapatkan lokasi. Pastikan GPS HP/Laptop aktif!");
+        setGeoMessage("Gagal mendapatkan lokasi. Pastikan GPS/Wi-Fi aktif dan izinkan lokasi di browser.");
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      options
     );
+
+    // Timeout pengaman: Hentikan melacak setelah 15 detik untuk hemat daya
+    setTimeout(() => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    }, 15000);
   }, []);
 
   function formatDate(value) {
@@ -150,7 +185,7 @@ export default function DashboardPage() {
     }
 
     if (!location.latitude || !location.longitude) {
-      setError("Lokasi GPS belum siap. Silakan klik 'Perbarui Lokasi'.");
+      setError("Lokasi GPS belum siap. Silakan klik 'Perbarui Lokasi GPS'.");
       return;
     }
 
@@ -203,6 +238,89 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Checkin Error:", err);
       setError(err?.message || "Terjadi kesalahan saat menyimpan data absensi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCheckOut() {
+    setMessage("");
+    setError("");
+
+    // Require 17:00 or later local time
+    const now = new Date();
+    const localHour = now.getHours();
+    if (localHour < 17) {
+      setError("Absen pulang hanya dapat dilakukan setelah jam 17:00.");
+      return;
+    }
+
+    if (!location.latitude || !location.longitude) {
+      setError("Lokasi GPS belum siap. Silakan klik 'Perbarui Lokasi'.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const screenshot = webcamRef.current?.getScreenshot();
+      if (!screenshot) {
+        setError("Gagal mengambil foto. Izinkan akses kamera pada browser Anda.");
+        setBusy(false);
+        return;
+      }
+
+      const res = await fetch(screenshot);
+      const blob = await res.blob();
+      const fileName = `selfies/${profile.id}/checkout-${Date.now()}.png`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("selfies")
+        .upload(fileName, blob, { contentType: "image/png", upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from("selfies")
+        .getPublicUrl(fileName);
+
+      const imageUrl = publicUrlData.publicUrl;
+
+      // find latest attendance row without check_out_time
+      const { data: lastRow, error: fetchErr } = await supabase
+        .from("attendance")
+        .select("id")
+        .eq("user_id", profile.id)
+        .is("check_out_time", null)
+        .order("check_in_time", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchErr) throw fetchErr;
+      if (!lastRow || !lastRow.id) {
+        setError("Tidak ditemukan catatan check-in yang bisa di-checkout.");
+        setBusy(false);
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+
+      const { error: updateError } = await supabase
+        .from("attendance")
+        .update({
+          check_out_time: nowIso,
+          check_out_image_url: imageUrl,
+          check_out_latitude: location.latitude,
+          check_out_longitude: location.longitude,
+        })
+        .eq("id", lastRow.id);
+
+      if (updateError) throw updateError;
+
+      setMessage("✅ Absensi pulang berhasil dicatat. Selamat pulang!");
+      await loadAttendance();
+    } catch (err) {
+      console.error("Checkout Error:", err);
+      setError(err?.message || "Terjadi kesalahan saat menyimpan data absensi pulang.");
     } finally {
       setBusy(false);
     }
@@ -293,6 +411,14 @@ export default function DashboardPage() {
                 className="inline-flex items-center justify-center rounded-3xl bg-orange-600 px-6 py-3.5 text-base font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {busy ? "Mengirim Data Absen..." : "Absen Masuk Sekarang"}
+              </button>
+              <button
+                type="button"
+                onClick={handleCheckOut}
+                disabled={busy || !gpsStatus.isInside}
+                className="inline-flex items-center justify-center rounded-3xl bg-slate-700 px-6 py-3.5 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {busy ? "Mengirim Data..." : "Absen Pulang (>=17:00)"}
               </button>
               <button
                 type="button"
