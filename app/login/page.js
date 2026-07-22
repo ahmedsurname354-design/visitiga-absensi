@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Webcam from "react-webcam";
 import { getSupabaseClient } from "@/lib/supabase";
-import { isWithinOfficeRadius } from "@/lib/geofence";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,11 +13,6 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const router = useRouter();
-  const webcamRef = useRef(null);
-  const [photoPreview, setPhotoPreview] = useState(null);
-  const [photoTaken, setPhotoTaken] = useState(false);
-  const [geoCheckMessage, setGeoCheckMessage] = useState("");
-  const [geoCheckStatus, setGeoCheckStatus] = useState({ distance: null, isInside: false });
 
   function normalizeRole(role) {
     if (!role) return null;
@@ -55,66 +48,6 @@ export default function LoginPage() {
     }
   }, []);
 
-  const capturePhotoAndCheckLocation = useCallback(async () => {
-    setGeoCheckMessage("Mencapture foto dan memeriksa lokasi...");
-
-    // ambil foto dari webcam
-    const imageSrc = webcamRef.current?.getScreenshot?.();
-    if (!imageSrc) {
-      setGeoCheckMessage("Gagal mengambil foto. Pastikan kamera diizinkan.");
-      return;
-    }
-    setPhotoPreview(imageSrc);
-    setPhotoTaken(true);
-
-    // geolocation sampling mirip dengan dashboard
-    if (!navigator.geolocation) {
-      setGeoCheckMessage("Perangkat tidak mendukung GPS.");
-      return;
-    }
-
-    const samples = [];
-    const maxSamples = 3;
-
-    const trySample = (attempt = 1) => {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          samples.push(position.coords);
-          if ((position.coords.accuracy || Infinity) <= 50) {
-            const r = isWithinOfficeRadius(position.coords.latitude, position.coords.longitude);
-            setGeoCheckStatus(r);
-            setGeoCheckMessage(r.isInside ? "Foto: Anda berada di area kantor." : `Foto: Anda di luar area kantor (jarak ${Math.round(r.distance)} m)`);
-            return;
-          }
-          if (attempt < maxSamples) {
-            setTimeout(() => trySample(attempt + 1), 500);
-            return;
-          }
-
-          const best = samples.reduce((prev, cur) => {
-            if (!prev) return cur;
-            return (cur.accuracy || Infinity) < (prev.accuracy || Infinity) ? cur : prev;
-          }, null);
-
-          if (!best) {
-            setGeoCheckMessage("Gagal mendapatkan posisi yang akurat.");
-            return;
-          }
-
-          const r = isWithinOfficeRadius(best.latitude, best.longitude);
-          setGeoCheckStatus(r);
-          setGeoCheckMessage(r.isInside ? "Foto: Anda berada di area kantor." : `Foto: Anda di luar area kantor (jarak ${Math.round(r.distance)} m)`);
-        },
-        (err) => {
-          console.error("GPS Error:", err);
-          setGeoCheckMessage("Gagal mendapatkan lokasi. Pastikan GPS/wi-fi aktif dan izinkan lokasi.");
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-      );
-    };
-
-    trySample(1);
-  }, []);
 
   // Mengambil Role dari DB / Metadata
   const getProfileRole = useCallback(async (userId, userEmail, token) => {
@@ -201,9 +134,6 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // require photo-first
-      if (!photoTaken) throw new Error("Silakan ambil foto dan cek lokasi terlebih dahulu.");
-
       const supabase = getSupabaseClient();
       const { data, error: loginError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
@@ -270,41 +200,15 @@ export default function LoginPage() {
           <section className="p-8 lg:p-10 flex flex-col justify-center">
             <h2 className="text-2xl font-semibold text-slate-900">Masuk ke Sistem</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Gunakan email kantor dan password terdaftar.
+              Gunakan email kantor dan password terdaftar. Selfie dan geolokasi hanya akan muncul setelah login di dashboard.
             </p>
+            <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-slate-700">
+              <p className="font-semibold text-slate-900">Perhatian:</p>
+              <p className="mt-1">Tidak ada kamera atau selfie di halaman login. Hanya email dan password yang diperlukan di sini.</p>
+            </div>
 
             <form onSubmit={handleLogin} className="mt-6 space-y-4">
               <div className="mb-4">
-                <p className="text-sm font-semibold text-slate-700">Ambil Foto untuk Login</p>
-                <div className="mt-2 flex items-start gap-4">
-                  <div>
-                    <Webcam
-                      audio={false}
-                      ref={webcamRef}
-                      screenshotFormat="image/png"
-                      className="rounded-xl border border-slate-200"
-                      videoConstraints={{ facingMode: "user" }}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <button
-                      type="button"
-                      onClick={capturePhotoAndCheckLocation}
-                      className="rounded-2xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white"
-                    >
-                      Ambil Foto & Cek Lokasi
-                    </button>
-
-                    {photoPreview && (
-                      <div className="mt-3">
-                        <img src={photoPreview} alt="Preview" className="w-48 rounded-lg border" />
-                        <p className="mt-2 text-sm text-slate-600">{geoCheckMessage}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-700 uppercase tracking-wider">
                   Email Kantor
                 </label>
