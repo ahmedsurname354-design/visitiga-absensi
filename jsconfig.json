@@ -4,8 +4,7 @@
     "paths": {
       "@/*": ["./*"]
     },
-    "skipLibCheck": true,
-    "ignoreDeprecations": "6.0"
+    "skipLibCheck": true
   },
   "exclude": ["node_modules", ".next"]
 }
